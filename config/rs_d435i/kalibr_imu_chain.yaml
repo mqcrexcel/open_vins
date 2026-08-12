@@ -3,15 +3,15 @@
 # =====================================================================
 # RealSense D435i - IMU Bosch BMI055
 #
-# !!! CANH BAO !!!
-# Cac gia tri nhieu duoi day KE THUA tu config D455 va chi la diem
-# xuat phat. De co ket qua tot, do lai bang allan_variance_ros:
+# !!! WARNING !!!
+# The noise values below are INHERITED from the D455 config and are only
+# a starting point. For good results, measure them with allan_variance_ros:
 #   https://github.com/ori-drs/allan_variance_ros
-# Ghi hinh IMU dung yen 3-5 tieng roi chay Allan variance.
+# Record the IMU sitting still for 3-5 hours, then run Allan variance.
 #
-# Meo: nen NHAN gia tri do duoc len (white noise x2, random walk x10)
-# de bu cho cac hieu ung khong duoc mo hinh hoa - day chinh la cach
-# upstream lam trong config/rs_d455.
+# Tip: INFLATE the measured values (white noise x2, random walk x10) to
+# compensate for unmodelled effects - this is exactly what upstream does
+# in config/rs_d455.
 # =====================================================================
 
 imu0:
@@ -20,23 +20,23 @@ imu0:
     - [0.0, 1.0, 0.0, 0.0]
     - [0.0, 0.0, 1.0, 0.0]
     - [0.0, 0.0, 0.0, 1.0]
-  # Gia tri da duoc nhan he so an toan (xem ghi chu tren)
+  # Values already inflated by a safety factor (see note above)
   accelerometer_noise_density: 0.00207649074
   accelerometer_random_walk: 0.00041327852
   gyroscope_noise_density: 0.00020544166
   gyroscope_random_walk: 0.00001110622
   rostopic: /camera/camera/imu
   time_offset: 0.0
-  # Phai KHOP voi gyro_fps trong lenh launch driver.
-  # D435i ho tro gyro 200 hoac 400 Hz; accel 63 hoac 250 Hz.
+  # Must MATCH gyro_fps in the driver launch command.
+  # The D435i supports gyro at 200 or 400 Hz; accel at 63 or 250 Hz.
   update_rate: 400
-  # ba che do: "calibrated" (= "kalibr"), "kalibr", "rpng"
+  # three modes: "calibrated" (= "kalibr"), "kalibr", "rpng"
   model: "kalibr"
-  # Cach lay tu file imu.yaml cua Kalibr:
+  # How to read these off Kalibr's imu.yaml:
   #   - Tw           <- imu0:gyroscopes:M
   #   - R_IMUtoGYRO  <- imu0:gyroscopes:C_gyro_i
   #   - Ta           <- imu0:accelerometers:M
-  #   - R_IMUtoACC   khong duoc Kalibr dung
+  #   - R_IMUtoACC   not used by Kalibr
   #   - Tg           <- imu0:gyroscopes:A
   Tw:
     - [ 1.0, 0.0, 0.0 ]

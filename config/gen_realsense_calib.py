@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-Sinh file kalibr_imucam_chain.yaml cho OpenVINS tu factory calibration
-cua camera RealSense dang cam vao may.
+Generate kalibr_imucam_chain.yaml for OpenVINS from the factory calibration
+of the RealSense camera currently plugged into the machine.
 
-Dung cho D435i / D455 / D457 (moi loai co IMU).
+Works for D435i / D455 / D457 (all of which have an IMU).
 
-Cach dung:
-    python3 config/gen_realsense_calib.py                     # in ra man hinh
+Usage:
+    python3 config/gen_realsense_calib.py                     # print to stdout
     python3 config/gen_realsense_calib.py -o config/rs_d435i/kalibr_imucam_chain.yaml
-    python3 config/gen_realsense_calib.py --stream color      # dung RGB thay vi IR
+    python3 config/gen_realsense_calib.py --stream color      # use RGB instead of IR
     python3 config/gen_realsense_calib.py --width 1280 --height 720
 
-LUU Y: factory calibration TOT cho intrinsics, nhung extrinsics camera-IMU
-thi chi o muc "tam duoc". De co ket quo tot nhat van nen hieu chuan Kalibr.
+NOTE: the factory calibration is GOOD for intrinsics, but the camera-IMU
+extrinsics are only "just about acceptable". For best results, still run a
+Kalibr calibration.
 """
 
 import argparse
@@ -22,11 +23,11 @@ try:
     import numpy as np
     import pyrealsense2 as rs
 except ImportError as e:
-    sys.exit("Thieu thu vien: {}\n  pip install pyrealsense2 numpy".format(e))
+    sys.exit("Missing library: {}\n  pip install pyrealsense2 numpy".format(e))
 
 
 def fmt_mat4(R, t, indent="    "):
-    """In ma tran 4x4 theo dinh dang YAML cua Kalibr."""
+    """Print a 4x4 matrix in Kalibr's YAML format."""
     lines = []
     for i in range(3):
         lines.append("{}- [{:.17g}, {:.17g}, {:.17g}, {:.17g}]".format(
@@ -38,31 +39,31 @@ def fmt_mat4(R, t, indent="    "):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stream", choices=["infra", "color"], default="infra",
-                    help="infra = 2 imager IR global shutter (khuyen nghi cho VIO)")
+                    help="infra = the 2 global-shutter IR imagers (recommended for VIO)")
     ap.add_argument("--width", type=int, default=848)
     ap.add_argument("--height", type=int, default=480)
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("-o", "--output", default=None)
     args = ap.parse_args()
 
-    # --- Tim thiet bi ---
+    # --- Find the device ---
     ctx = rs.context()
     devices = list(ctx.query_devices())
     if not devices:
-        sys.exit("Khong tim thay camera RealSense nao.\n"
-                 "  - Kiem tra cap (D435i/D455 can USB3)\n"
-                 "  - Chay 'rs-enumerate-devices' de xac nhan\n"
-                 "  - D457 dung GMSL, can bo deserializer + kernel driver d4xx")
+        sys.exit("No RealSense camera found.\n"
+                 "  - Check the cable (D435i/D455 need USB3)\n"
+                 "  - Run 'rs-enumerate-devices' to confirm\n"
+                 "  - The D457 uses GMSL and needs a deserializer board + the d4xx kernel driver")
 
     dev = devices[0]
     name = dev.get_info(rs.camera_info.name)
     serial = dev.get_info(rs.camera_info.serial_number)
     fw = dev.get_info(rs.camera_info.firmware_version)
-    print("# Thiet bi : {}".format(name), file=sys.stderr)
+    print("# Device   : {}".format(name), file=sys.stderr)
     print("# Serial   : {}".format(serial), file=sys.stderr)
     print("# Firmware : {}".format(fw), file=sys.stderr)
 
-    # --- Bat cac stream can thiet ---
+    # --- Enable the required streams ---
     cfg = rs.config()
     cfg.enable_device(serial)
     if args.stream == "infra":
@@ -77,12 +78,12 @@ def main():
     try:
         profile = pipe.start(cfg)
     except RuntimeError as e:
-        sys.exit("Khong mo duoc stream ({}x{}@{}): {}\n"
-                 "  Thu do phan giai khac, vd --width 640 --height 480"
+        sys.exit("Could not open the stream ({}x{}@{}): {}\n"
+                 "  Try another resolution, e.g. --width 640 --height 480"
                  .format(args.width, args.height, args.fps, e))
 
     try:
-        # Stream IMU lam goc toa do (accel = goc cua IMU trong librealsense)
+        # Use the IMU stream as the frame origin (accel = the IMU origin in librealsense)
         imu_prof = profile.get_stream(rs.stream.accel)
 
         if args.stream == "infra":
@@ -92,22 +93,22 @@ def main():
             cams = [("cam0", profile.get_stream(rs.stream.color), "color")]
 
         out = ["%YAML:1.0", ""]
-        out.append("# Sinh tu dong tu factory calibration")
-        out.append("# Thiet bi: {}  serial: {}  fw: {}".format(name, serial, fw))
-        out.append("# Do phan giai: {}x{} @ {}fps".format(args.width, args.height, args.fps))
+        out.append("# Auto-generated from factory calibration")
+        out.append("# Device: {}  serial: {}  fw: {}".format(name, serial, fw))
+        out.append("# Resolution: {}x{} @ {}fps".format(args.width, args.height, args.fps))
         out.append("")
 
         for idx, (key, sp, label) in enumerate(cams):
             vsp = sp.as_video_stream_profile()
             intr = vsp.get_intrinsics()
 
-            # Extrinsics tu IMU -> camera chinh la T_cam_imu
+            # The extrinsics from IMU -> camera are exactly T_cam_imu
             extr = imu_prof.get_extrinsics_to(sp)
-            # librealsense tra rotation dang COLUMN-MAJOR 9 phan tu
+            # librealsense returns the rotation as 9 elements in COLUMN-MAJOR order
             R = np.array(extr.rotation, dtype=float).reshape(3, 3).T
             t = np.array(extr.translation, dtype=float)
 
-            # Stream ".../image_rect_raw" da rectify -> he so meo = 0
+            # The ".../image_rect_raw" stream is already rectified -> distortion coeffs = 0
             coeffs = list(intr.coeffs[:4])
 
             if args.stream == "infra":
@@ -118,7 +119,7 @@ def main():
             overlaps = [1 - idx] if len(cams) == 2 else []
 
             out.append("{}:".format(key))
-            out.append("  # {} | model meo: {}".format(label, intr.model))
+            out.append("  # {} | distortion model: {}".format(label, intr.model))
             out.append("  T_cam_imu:")
             out.append(fmt_mat4(R, t))
             out.append("  cam_overlaps: {}".format(overlaps))
@@ -140,7 +141,7 @@ def main():
     if args.output:
         with open(args.output, "w") as f:
             f.write(text)
-        print("Da ghi: {}".format(args.output), file=sys.stderr)
+        print("Written: {}".format(args.output), file=sys.stderr)
     else:
         print(text)
 

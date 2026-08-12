@@ -1,18 +1,18 @@
 %YAML:1.0
 
 # =====================================================================
-# !!! CANH BAO / WARNING !!!
-# Cac gia tri intrinsics / distortion / T_cam_imu duoi day duoc COPY tu
-# config/rs_d455 va CHUA PHAI cua camera cua ban.
-# BAT BUOC phai hieu chuan lai bang Kalibr truoc khi tin ket qua VIO.
-# Xem: https://docs.openvins.com/gs-calibration.html
+# !!! WARNING !!!
+# The intrinsics / distortion / T_cam_imu values below are COPIED from
+# config/rs_d455 and are NOT those of your camera.
+# You MUST re-calibrate with Kalibr before trusting any VIO result.
+# See: https://docs.openvins.com/gs-calibration.html
 #
-# Lay gia tri khoi dau tu factory calib:
+# To get starting values from the factory calibration:
 #   rs-enumerate-devices -c
 # =====================================================================
 
 cam0:
-  # T_cam_imu = T_ItoC (transform tu IMU sang camera)
+  # T_cam_imu = T_ItoC (transform from IMU to camera)
   T_cam_imu:
     - [0.9999654398038452, 0.007342326779113337, -0.003899927610975742, -0.027534314618518095]
     - [-0.0073452195116216765, 0.9999727585590525, -0.0007279355223411334, -0.0030587146933711722]
@@ -24,7 +24,7 @@ cam0:
   distortion_model: radtan
   intrinsics: [416.85223429743274, 414.92069080087543, 421.02459311003213, 237.76180565241077] # fx fy cx cy
   resolution: [848, 480]
-  # Topic cua ROS2 wrapper (realsense2_camera >= 4.51 dung namespace /camera/camera/)
-  # Kiem tra lai bang: ros2 topic list
+  # Topic of the ROS 2 wrapper (realsense2_camera >= 4.51 uses the /camera/camera/ namespace)
+  # Verify with: ros2 topic list
   rostopic: /camera/camera/infra1/image_rect_raw
   timeshift_cam_imu: 0.002524377913673846

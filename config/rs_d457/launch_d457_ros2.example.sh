@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
 # =====================================================================
-# Vi du khoi dong RealSense D457/D455 cho OpenVINS tren ROS2 Jazzy
+# Example bring-up of a RealSense D457/D455 for OpenVINS on ROS 2 Jazzy
 # =====================================================================
 #
-# CAC THAM SO QUAN TRONG (khong duoc bo qua):
+# IMPORTANT PARAMETERS (do not skip these):
 #
 #  depth_module.emitter_enabled:=0
-#     -> TAT bo phat IR chu dong. Neu bat, cac cham IR se in len anh
-#        infra1/infra2 va pha hong hoan toan KLT feature tracking.
-#        Day la loi pho bien nhat khi chay VIO voi RealSense.
+#     -> Turn OFF the active IR projector. If left on, the IR dots are
+#        printed onto the infra1/infra2 images and completely break KLT
+#        feature tracking. This is the most common mistake when running
+#        VIO with a RealSense.
 #
 #  unite_imu_method:=2   (2 = linear_interpolation)
-#     -> Accel (~250Hz) va gyro (~400Hz) ve theo 2 luong rieng.
-#        OpenVINS can MOT topic /imu duy nhat co ca 2. Neu khong bat,
-#        topic /camera/camera/imu se khong ton tai.
+#     -> Accel (~250Hz) and gyro (~400Hz) arrive as two separate streams.
+#        OpenVINS needs a SINGLE /imu topic carrying both. Without this,
+#        the /camera/camera/imu topic does not exist.
 #
 #  global_time_enabled:=true
-#     -> Dong bo timestamp cua camera sang dong ho he thong.
+#     -> Sync the camera timestamps to the system clock.
 #
-# Dung anh INFRA (global shutter, mono) thay vi COLOR cho VIO.
+# Use the INFRA images (global shutter, mono) rather than COLOR for VIO.
 
 ros2 launch realsense2_camera rs_launch.py \
   depth_module.emitter_enabled:=0 \
@@ -34,5 +35,5 @@ ros2 launch realsense2_camera rs_launch.py \
   unite_imu_method:=2 \
   global_time_enabled:=true
 
-# Sau do o terminal khac:
+# Then, in another terminal:
 #   ros2 launch ov_msckf subscribe.launch.py config:=rs_d457 rviz_enable:=true

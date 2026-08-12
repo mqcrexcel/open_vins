@@ -1,11 +1,11 @@
 %YAML:1.0
 
-# Sinh tu dong tu factory calibration
-# Thiet bi: Intel RealSense D455  serial: 351322306551  fw: 5.17.0.10
-# Do phan giai: 848x480 @ 30fps
+# Auto-generated from factory calibration
+# Device: Intel RealSense D455  serial: 351322306551  fw: 5.17.0.10
+# Resolution: 848x480 @ 30fps
 
 cam0:
-  # infra1 | model meo: distortion.brown_conrady
+  # infra1 | distortion model: distortion.brown_conrady
   T_cam_imu:
     - [1, 0, 0, 0.030220000073313713]
     - [0, 1, 0, -0.0074000000022351742]
@@ -21,7 +21,7 @@ cam0:
   timeshift_cam_imu: 0.0
 
 cam1:
-  # infra2 | model meo: distortion.brown_conrady
+  # infra2 | distortion model: distortion.brown_conrady
   T_cam_imu:
     - [1, 0, 0, -0.064852900803089142]
     - [0, 1, 0, -0.0074000000022351742]

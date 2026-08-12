@@ -1,34 +1,36 @@
 #!/usr/bin/env bash
 # =====================================================================
-# Khoi dong RealSense D435i cho OpenVINS tren ROS2 Jazzy
+# Bring up a RealSense D435i for OpenVINS on ROS 2 Jazzy
 # =====================================================================
 #
-# KHAC BIET QUAN TRONG SO VOI D455:
+# KEY DIFFERENCES FROM THE D455:
 #
-#  * D435i co camera RGB dung ROLLING SHUTTER.
-#    -> TUYET DOI khong dung /color/image_raw cho VIO. Khi camera xoay
-#       nhanh, moi hang pixel duoc chup o mot thoi diem khac nhau, lam
-#       sai lech hinh hoc va pha vo mo hinh do cua bo loc.
-#       (D455 co RGB global shutter nen dung color duoc - D435i thi KHONG.)
-#    -> Luon dung infra1/infra2: hai imager IR nay la GLOBAL SHUTTER.
+#  * The D435i RGB camera uses a ROLLING SHUTTER.
+#    -> NEVER use /color/image_raw for VIO. When the camera rotates
+#       quickly, each pixel row is captured at a different instant, which
+#       distorts the geometry and breaks the filter's measurement model.
+#       (The D455 has a global-shutter RGB so color is usable there - the
+#       D435i is NOT.)
+#    -> Always use infra1/infra2: both IR imagers are GLOBAL SHUTTER.
 #
-#  * Baseline D435i ~50mm (D455 ~95mm) -> extrinsics cam1 khac han,
-#    khong copy duoc tu config D455.
+#  * D435i baseline ~50mm (D455 ~95mm) -> the cam1 extrinsics differ
+#    entirely and cannot be copied from the D455 config.
 #
-# CAC THAM SO BAT BUOC:
+# MANDATORY PARAMETERS:
 #
 #  depth_module.emitter_enabled:=0
-#     -> TAT bo phat IR. Neu bat, cac cham laser IR se in len anh
-#        infra1/infra2. Chung DUNG YEN so voi camera, nen KLT tracker
-#        se bam vao cham laser thay vi bam vao canh vat -> VIO sai hoan
-#        toan. Day la loi pho bien nhat khi chay VIO voi RealSense.
+#     -> Turn OFF the IR projector. If left on, the IR laser dots are
+#        printed onto the infra1/infra2 images. They are STATIONARY
+#        relative to the camera, so the KLT tracker locks onto the dots
+#        instead of the scene -> VIO goes completely wrong. This is the
+#        single most common mistake when running VIO with a RealSense.
 #
 #  unite_imu_method:=2   (2 = linear_interpolation)
-#     -> Gop accel va gyro thanh MOT topic /camera/camera/imu.
-#        Khong bat thi topic nay khong ton tai.
+#     -> Merge accel and gyro into ONE /camera/camera/imu topic.
+#        Without it that topic does not exist.
 #
 #  global_time_enabled:=true
-#     -> Dong bo timestamp camera voi dong ho he thong.
+#     -> Sync the camera timestamps to the system clock.
 
 ros2 launch realsense2_camera rs_launch.py \
   depth_module.emitter_enabled:=0 \
@@ -48,32 +50,32 @@ ros2 launch realsense2_camera rs_launch.py \
   depth_module.gain:=64
 
 # -----------------------------------------------------------------
-# CHONG NHOE CHUYEN DONG (motion blur)
+# MOTION BLUR
 #
-# Do tren D455 cung ho: auto-exposure chay toi ~20ms (19946us) trong
-# nha. Voi fx ~ 425 px (1 do ~ 7.4 pixel), vet nhoe la:
+# Measured on a D455 of the same family: auto-exposure runs up to ~20ms
+# (19946us) indoors. With fx ~ 425 px (1 deg ~ 7.4 pixels), the blur is:
 #       blur_px = fx * omega(rad/s) * t_exposure
-#   Tai 20ms:  115 do/s -> 17 px | 285 do/s -> 42 px | 570 do/s -> 85 px
-#   Tai  3ms:  115 do/s ->  3 px | 285 do/s ->  6 px | 570 do/s -> 13 px
-# min_px_dist = 15 -> o 20ms chi can lac vua la KLT mat bam -> ODOM TROI.
+#   At 20ms:  115 deg/s -> 17 px | 285 deg/s -> 42 px | 570 deg/s -> 85 px
+#   At  3ms:  115 deg/s ->  3 px | 285 deg/s ->  6 px | 570 deg/s -> 13 px
+# min_px_dist = 15 -> at 20ms even moderate shaking loses KLT track -> ODOM DRIFTS.
 #
-# LUU Y: cach dung depth_module.auto_exposure_limit KHONG an (da thu
-# tren D455: dat limit=3000 nhung actual_exposure van 19946us).
-# Phai TAT han auto-exposure moi co tac dung.
+# NOTE: the depth_module.auto_exposure_limit approach does NOT work
+# (tested on a D455: set limit=3000 but actual_exposure stayed 19946us).
+# Auto-exposure must be fully DISABLED to have any effect.
 #
-# Kiem chung bang metadata (khong tin tham so, phai xem gia tri THUC):
+# Verify via metadata (do not trust the parameter, read the ACTUAL value):
 #   ros2 topic echo --once --full-length /camera/camera/infra1/metadata \
 #     | grep -o '"actual_exposure":[0-9]*'
 # -----------------------------------------------------------------
 
-# Kiem tra truoc khi chay OpenVINS:
-#   ros2 topic hz /camera/camera/infra1/image_rect_raw   # ky vong ~30 Hz
-#   ros2 topic hz /camera/camera/imu                     # ky vong ~400 Hz
+# Check before running OpenVINS:
+#   ros2 topic hz /camera/camera/infra1/image_rect_raw   # expect ~30 Hz
+#   ros2 topic hz /camera/camera/imu                     # expect ~400 Hz
 #
-# Chay OpenVINS (stereo):
+# Run OpenVINS (stereo):
 #   ros2 launch ov_msckf subscribe.launch.py config:=rs_d435i \
 #        max_cameras:=2 use_stereo:=true rviz_enable:=true
 #
-# Neu may yeu, chay mono cho nhe:
+# On a weaker machine, run mono to lighten the load:
 #   ros2 launch ov_msckf subscribe.launch.py config:=rs_d435i \
 #        max_cameras:=1 use_stereo:=false rviz_enable:=true

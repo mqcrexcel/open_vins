@@ -3,27 +3,27 @@
 # =====================================================================
 # RealSense D435i - stereo infrared (infra1 + infra2)
 #
-# !!! CANH BAO !!!
-# Cac gia tri duoi day la GIA TRI MAU dien hinh cua D435i o 848x480,
-# CHUA PHAI cua camera cua ban. Bat buoc thay bang gia tri that:
+# !!! WARNING !!!
+# The values below are TYPICAL SAMPLE VALUES for a D435i at 848x480,
+# NOT those of your camera. You must replace them with real ones:
 #
-#   1) Nhanh (chap nhan duoc): lay factory calib
+#   1) Quick (acceptable): take the factory calibration
 #        rs-enumerate-devices -c
-#   2) Chinh xac (khuyen nghi): hieu chuan Kalibr camera-IMU
+#   2) Accurate (recommended): Kalibr camera-IMU calibration
 #        https://docs.openvins.com/gs-calibration.html
 #
-# LUU Y QUAN TRONG VE DISTORTION:
-# Topic infra1/infra2 ".../image_rect_raw" da duoc RECTIFY san boi
-# firmware, nen distortion_coeffs = [0,0,0,0] la DUNG.
-# Neu ban doi sang stream raw chua rectify thi phai dien lai he so.
+# IMPORTANT NOTE ON DISTORTION:
+# The infra1/infra2 ".../image_rect_raw" topics are already RECTIFIED by
+# the firmware, so distortion_coeffs = [0,0,0,0] is CORRECT.
+# If you switch to the raw unrectified stream, fill the coefficients back in.
 #
-# Parser cua OpenVINS chap nhan ca "T_cam_imu" lan "T_imu_cam" va tu
-# nghich dao neu can (ov_core/src/utils/opencv_yaml_parse.h:529).
-# Kalibr xuat ra "T_cam_imu" nen dan thang ket qua Kalibr vao day duoc.
+# The OpenVINS parser accepts both "T_cam_imu" and "T_imu_cam" and inverts
+# automatically when needed (ov_core/src/utils/opencv_yaml_parse.h:529).
+# Kalibr emits "T_cam_imu", so you can paste Kalibr's output straight in.
 # =====================================================================
 
 cam0:
-  # infra1 = imager IR trai. T_cam_imu: transform tu IMU sang camera.
+  # infra1 = left IR imager. T_cam_imu: transform from IMU to camera.
   T_cam_imu:
     - [1.0, 0.0, 0.0, 0.0203127252531052]
     - [0.0, 1.0, 0.0, 0.0051032523624599]
@@ -31,7 +31,7 @@ cam0:
     - [0.0, 0.0, 0.0, 1.0]
   cam_overlaps: [1]
   camera_model: pinhole
-  distortion_coeffs: [0.0, 0.0, 0.0, 0.0] # da rectify -> bang 0
+  distortion_coeffs: [0.0, 0.0, 0.0, 0.0] # already rectified -> zero
   distortion_model: radtan
   intrinsics: [425.0, 425.0, 424.0, 240.0] # fx, fy, cx, cy
   resolution: [848, 480]
@@ -39,8 +39,8 @@ cam0:
   timeshift_cam_imu: 0.0
 
 cam1:
-  # infra2 = imager IR phai. Lech so voi cam0 dung bang BASELINE.
-  # Baseline D435i ~ 50mm (D455 ~ 95mm) -> so nay KHAC hoan toan D455.
+  # infra2 = right IR imager. Offset from cam0 equals exactly the BASELINE.
+  # D435i baseline ~ 50mm (D455 ~ 95mm) -> this number is COMPLETELY different from the D455.
   T_cam_imu:
     - [1.0, 0.0, 0.0, -0.0296872747468948]
     - [0.0, 1.0, 0.0, 0.0051032523624599]
