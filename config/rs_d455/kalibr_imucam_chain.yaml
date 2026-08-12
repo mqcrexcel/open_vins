@@ -1,19 +1,37 @@
 %YAML:1.0
 
+# Sinh tu dong tu factory calibration
+# Thiet bi: Intel RealSense D455  serial: 351322306551  fw: 5.17.0.10
+# Do phan giai: 848x480 @ 30fps
 
 cam0:
+  # infra1 | model meo: distortion.brown_conrady
   T_cam_imu:
-    - [0.9999654398038452, 0.007342326779113337, -0.003899927610975742, -0.027534314618518095]
-    - [-0.0073452195116216765, 0.9999727585590525, -0.0007279355223411334, -0.0030587146933711722]
-    - [0.0038944766308488753, 0.0007565561891287445, 0.9999921303062861, -0.023605118842939803]
+    - [1, 0, 0, 0.030220000073313713]
+    - [0, 1, 0, -0.0074000000022351742]
+    - [0, 0, 1, -0.016019999980926514]
     - [0.0, 0.0, 0.0, 1.0]
-  cam_overlaps: []
+  cam_overlaps: [1]
   camera_model: pinhole
-  distortion_coeffs: [-0.045761895748285604, 0.03423951132164367, -0.00040139057556727315, 0.000431371425853453]
+  distortion_coeffs: [0, 0, 0, 0]
   distortion_model: radtan
-  intrinsics: [416.85223429743274, 414.92069080087543, 421.02459311003213, 237.76180565241077]
+  intrinsics: [433.30636596679688, 433.30636596679688, 428.82168579101562, 237.01229858398438] # fx, fy, cx, cy
   resolution: [848, 480]
-  rostopic: /d455/color/image_raw
-  timeshift_cam_imu: 0.002524377913673846
+  rostopic: /camera/camera/infra1/image_rect_raw
+  timeshift_cam_imu: 0.0
 
-
+cam1:
+  # infra2 | model meo: distortion.brown_conrady
+  T_cam_imu:
+    - [1, 0, 0, -0.064852900803089142]
+    - [0, 1, 0, -0.0074000000022351742]
+    - [0, 0, 1, -0.016019999980926514]
+    - [0.0, 0.0, 0.0, 1.0]
+  cam_overlaps: [0]
+  camera_model: pinhole
+  distortion_coeffs: [0, 0, 0, 0]
+  distortion_model: radtan
+  intrinsics: [433.30636596679688, 433.30636596679688, 428.82168579101562, 237.01229858398438] # fx, fy, cx, cy
+  resolution: [848, 480]
+  rostopic: /camera/camera/infra2/image_rect_raw
+  timeshift_cam_imu: 0.0

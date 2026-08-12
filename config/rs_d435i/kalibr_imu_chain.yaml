@@ -1,0 +1,60 @@
+%YAML:1.0
+
+# =====================================================================
+# RealSense D435i - IMU Bosch BMI055
+#
+# !!! CANH BAO !!!
+# Cac gia tri nhieu duoi day KE THUA tu config D455 va chi la diem
+# xuat phat. De co ket qua tot, do lai bang allan_variance_ros:
+#   https://github.com/ori-drs/allan_variance_ros
+# Ghi hinh IMU dung yen 3-5 tieng roi chay Allan variance.
+#
+# Meo: nen NHAN gia tri do duoc len (white noise x2, random walk x10)
+# de bu cho cac hieu ung khong duoc mo hinh hoa - day chinh la cach
+# upstream lam trong config/rs_d455.
+# =====================================================================
+
+imu0:
+  T_i_b:
+    - [1.0, 0.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0, 0.0]
+    - [0.0, 0.0, 1.0, 0.0]
+    - [0.0, 0.0, 0.0, 1.0]
+  # Gia tri da duoc nhan he so an toan (xem ghi chu tren)
+  accelerometer_noise_density: 0.00207649074
+  accelerometer_random_walk: 0.00041327852
+  gyroscope_noise_density: 0.00020544166
+  gyroscope_random_walk: 0.00001110622
+  rostopic: /camera/camera/imu
+  time_offset: 0.0
+  # Phai KHOP voi gyro_fps trong lenh launch driver.
+  # D435i ho tro gyro 200 hoac 400 Hz; accel 63 hoac 250 Hz.
+  update_rate: 400
+  # ba che do: "calibrated" (= "kalibr"), "kalibr", "rpng"
+  model: "kalibr"
+  # Cach lay tu file imu.yaml cua Kalibr:
+  #   - Tw           <- imu0:gyroscopes:M
+  #   - R_IMUtoGYRO  <- imu0:gyroscopes:C_gyro_i
+  #   - Ta           <- imu0:accelerometers:M
+  #   - R_IMUtoACC   khong duoc Kalibr dung
+  #   - Tg           <- imu0:gyroscopes:A
+  Tw:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+  R_IMUtoGYRO:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+  Ta:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+  R_IMUtoACC:
+    - [ 1.0, 0.0, 0.0 ]
+    - [ 0.0, 1.0, 0.0 ]
+    - [ 0.0, 0.0, 1.0 ]
+  Tg:
+    - [ 0.0, 0.0, 0.0 ]
+    - [ 0.0, 0.0, 0.0 ]
+    - [ 0.0, 0.0, 0.0 ]
