@@ -1,6 +1,11 @@
 cmake-build-*
 build
 Build
+
+# colcon build artifacts (created when building from this directory)
+/install/
+/log/
+
 *.*~
 .idea
 doxgen_generated
