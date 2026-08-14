@@ -1,81 +1,113 @@
 #!/usr/bin/env bash
 # =====================================================================
-# Bring up a RealSense D435i for OpenVINS on ROS 2 Jazzy
+# Khoi dong RealSense D435i cho OpenVINS tren ROS2 Jazzy
+# Thiet bi da xac nhan: Intel RealSense D435I, serial 030522071743
 # =====================================================================
 #
-# KEY DIFFERENCES FROM THE D455:
+# BAN TOI GIAN - CO Y
+# -------------------
+# Chi truyen dung nhung tham so CAN de mo luong. Cac cai dat khac
+# (emitter, phoi sang, gain) duoc dat SAU khi driver chay, bang:
+#     bash config/apply_camera_settings.sh
 #
-#  * The D435i RGB camera uses a ROLLING SHUTTER.
-#    -> NEVER use /color/image_raw for VIO. When the camera rotates
-#       quickly, each pixel row is captured at a different instant, which
-#       distorts the geometry and breaks the filter's measurement model.
-#       (The D455 has a global-shutter RGB so color is usable there - the
-#       D435i is NOT.)
-#    -> Always use infra1/infra2: both IR imagers are GLOBAL SHUTTER.
+# Ly do: truyen depth_module.* qua dong lenh launch co dau hieu lam
+# driver treo o buoc "Sync Mode: Off" (khong mo duoc luong nao, khong
+# co topic nao). Dat bang 'ros2 param set' sau khi sensor da mo thi
+# DA KIEM CHUNG chay dung.
 #
-#  * D435i baseline ~50mm (D455 ~95mm) -> the cam1 extrinsics differ
-#    entirely and cannot be copied from the D455 config.
-#
-# MANDATORY PARAMETERS:
-#
-#  depth_module.emitter_enabled:=0
-#     -> Turn OFF the IR projector. If left on, the IR laser dots are
-#        printed onto the infra1/infra2 images. They are STATIONARY
-#        relative to the camera, so the KLT tracker locks onto the dots
-#        instead of the scene -> VIO goes completely wrong. This is the
-#        single most common mistake when running VIO with a RealSense.
-#
-#  unite_imu_method:=2   (2 = linear_interpolation)
-#     -> Merge accel and gyro into ONE /camera/camera/imu topic.
-#        Without it that topic does not exist.
-#
-#  global_time_enabled:=true
-#     -> Sync the camera timestamps to the system clock.
+# KHAC BIET QUAN TRONG SO VOI D455
+# --------------------------------
+# * RGB cua D435i la ROLLING SHUTTER -> TUYET DOI khong dung
+#   /color/image_raw cho VIO. Hai imager IR (infra1/infra2) moi la
+#   GLOBAL SHUTTER. (D455 co RGB global shutter nen dung color duoc,
+#   D435i thi KHONG.)
+# * Baseline D435i ~50mm, D455/D457 ~95mm -> extrinsics cam1 khac han,
+#   khong copy config qua lai duoc.
 
-ros2 launch realsense2_camera rs_launch.py \
-  depth_module.emitter_enabled:=0 \
-  enable_infra1:=true \
-  enable_infra2:=true \
-  enable_depth:=false \
-  enable_color:=false \
-  depth_module.infra_profile:=848x480x30 \
-  enable_gyro:=true \
-  enable_accel:=true \
-  gyro_fps:=400 \
-  accel_fps:=250 \
-  unite_imu_method:=2 \
-  global_time_enabled:=true \
-  depth_module.enable_auto_exposure:=false \
-  depth_module.exposure:=3000 \
-  depth_module.gain:=64
+set -e
 
 # -----------------------------------------------------------------
-# MOTION BLUR
+# TAT CORE DUMP - QUAN TRONG
 #
-# Measured on a D455 of the same family: auto-exposure runs up to ~20ms
-# (19946us) indoors. With fx ~ 425 px (1 deg ~ 7.4 pixels), the blur is:
-#       blur_px = fx * omega(rad/s) * t_exposure
-#   At 20ms:  115 deg/s -> 17 px | 285 deg/s -> 42 px | 570 deg/s -> 85 px
-#   At  3ms:  115 deg/s ->  3 px | 285 deg/s ->  6 px | 570 deg/s -> 13 px
-# min_px_dist = 15 -> at 20ms even moderate shaking loses KLT track -> ODOM DRIFTS.
-#
-# NOTE: the depth_module.auto_exposure_limit approach does NOT work
-# (tested on a D455: set limit=3000 but actual_exposure stayed 19946us).
-# Auto-exposure must be fully DISABLED to have any effect.
-#
-# Verify via metadata (do not trust the parameter, read the ACTUAL value):
-#   ros2 topic echo --once --full-length /camera/camera/infra1/metadata \
-#     | grep -o '"actual_exposure":[0-9]*'
-# -----------------------------------------------------------------
+# realsense2_camera_node co ~26 thread. Neu nhan Ctrl+\ (SIGQUIT),
+# kernel phai DUNG TAT CA thread truoc khi ghi core dump. Neu co MOT
+# thread ket trong driver USB (trang thai D, uninterruptible) thi no
+# khong dung duoc -> core dump cho vo han -> tien trinh vao trang thai
+# D va KHONG THE kill duoc, ke ca bang SIGKILL. Chi con cach rut cap.
+ulimit -c 0
 
-# Check before running OpenVINS:
-#   ros2 topic hz /camera/camera/infra1/image_rect_raw   # expect ~30 Hz
-#   ros2 topic hz /camera/camera/imu                     # expect ~400 Hz
+# -----------------------------------------------------------------
+# CANH BAO: neu script DUNG IM o dong "Dang kiem tra camera..." thi
+# driver UVC dang deadlock (tien trinh truoc khong thoat sach).
+# Dau hieu: ps se thay tien trinh o STAT=D, wchan=uvc_ctrl_*
+# CACH THOAT: RUT CAP USB cua camera ra roi cam lai.
+# -----------------------------------------------------------------
+echo "Dang kiem tra camera... (neu treo o day -> rut cap USB va cam lai)"
+INFO=$(timeout 15 python3 -c "
+import pyrealsense2 as rs
+d=list(rs.context().query_devices())
+if not d:
+    print('NO_DEVICE')
+else:
+    print(d[0].get_info(rs.camera_info.name) + '|' +
+          d[0].get_info(rs.camera_info.usb_type_descriptor))
+" 2>/dev/null || echo "UNKNOWN|")
+
+NAME="${INFO%%|*}"
+USB="${INFO##*|}"
+echo "Thiet bi: $NAME | USB type: $USB"
+
+if [ "$NAME" = "NO_DEVICE" ]; then
+  echo "LOI: khong thay camera nao. Kiem tra cap (D435i can USB 3.x)." >&2
+  exit 1
+fi
+if [ "${USB%%.*}" = "2" ]; then
+  echo "CANH BAO: dang o USB $USB -> chi co MOT luong IR, khong stereo duoc." >&2
+  echo "          Hay doi sang cong USB 3.x." >&2
+  exit 1
+fi
+
+# Chan nham model: baseline khac nhau se pha hong rang buoc stereo
+case "$NAME" in
+  *D435*) ;;
+  *D455*|*D457*) echo "LOI: day la $NAME (baseline ~95mm), KHONG dung config rs_d435i (50mm)." >&2
+                 echo "     Hay dung script tuong ung trong config/rs_d455 hoac config/rs_d457." >&2
+                 exit 1 ;;
+  *)      echo "CANH BAO: model khong nhan dang duoc, kiem tra lai config." >&2 ;;
+esac
+
+# 'exec' thay tien trinh bash bang ros2 launch, nen Ctrl+C di THANG toi
+# ros2 launch thay vi phai qua mot lop bash trung gian.
+exec ros2 launch realsense2_camera rs_launch.py \
+  enable_infra1:=true enable_infra2:=true \
+  enable_depth:=false enable_color:=false \
+  enable_gyro:=true enable_accel:=true unite_imu_method:=2
+
+# =====================================================================
+# SAU KHI DRIVER CHAY (terminal khac)
+# =====================================================================
+# 1) Ap dung emitter + phoi sang (BAT BUOC truoc khi chay OpenVINS):
+#      bash config/apply_camera_settings.sh
 #
-# Run OpenVINS (stereo):
+# 2) Kiem tra luong:
+#      ros2 topic list | grep infra    # PHAI co ca infra1 VA infra2
+#      ros2 topic hz /camera/camera/infra1/image_rect_raw
+#      ros2 topic hz /camera/camera/imu
+#
+# 3) Kiem tra DO PHAN GIAI co khop config khong (config dat 848x480):
+#      ros2 topic echo --once --no-arr /camera/camera/infra1/image_rect_raw \
+#        | grep -E "height|width"
+#    Ban toi gian nay khong ep infra_profile, nen driver dung mac dinh.
+#    Neu KHAC 848x480, sua 'resolution' trong kalibr_imucam_chain.yaml.
+#
+# =====================================================================
+# CHAY OpenVINS
+# =====================================================================
 #   ros2 launch ov_msckf subscribe.launch.py config:=rs_d435i \
 #        max_cameras:=2 use_stereo:=true rviz_enable:=true
 #
-# On a weaker machine, run mono to lighten the load:
+# Neu may yeu, chay mono:
 #   ros2 launch ov_msckf subscribe.launch.py config:=rs_d435i \
 #        max_cameras:=1 use_stereo:=false rviz_enable:=true
+#
+# KHOI TAO: giu yen 2-3 giay roi DI CHUYEN DUT KHOAT (tinh tien 20-30cm).

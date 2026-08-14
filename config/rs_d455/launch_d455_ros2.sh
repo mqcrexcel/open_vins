@@ -1,83 +1,95 @@
 #!/usr/bin/env bash
 # =====================================================================
-# Bring up a RealSense D455 for OpenVINS on ROS 2 Jazzy
-# Validated device: Intel RealSense D455, serial 351322306551, FW 5.17.0.10
+# Khoi dong RealSense D455 cho OpenVINS tren ROS2 Jazzy
+# Thiet bi da xac nhan: Intel RealSense D455, serial 351322306551
 # =====================================================================
 #
-# !!! HARD REQUIREMENT: MUST BE PLUGGED INTO A USB 3.x PORT !!!
+# BAN TOI GIAN - CO Y
+# -------------------
+# Chi truyen dung nhung tham so CAN de mo luong. Cac cai dat khac
+# (emitter, phoi sang, gain) duoc dat SAU khi driver chay, bang:
+#     bash config/apply_camera_settings.sh
 #
-# Check before running:
-#     rs-enumerate-devices -s
-#     python3 -c "import pyrealsense2 as rs; \
-#       print(list(rs.context().query_devices())[0].get_info(rs.camera_info.usb_type_descriptor))"
+# Ly do: truyen depth_module.* qua dong lenh launch co dau hieu lam
+# driver treo o buoc "Sync Mode: Off" (khong mo duoc luong nao, khong
+# co topic nao). Lan chay THANH CONG dau tien khong he co cac tham so
+# do. Dat bang 'ros2 param set' sau khi sensor da mo thi DA KIEM CHUNG:
+#     actual_exposure   : 19946 -> 3000
+#     frame_laser_power :   150 -> 0
 #
-# This must print "3.2". If it prints "2.1", STOP - on USB 2.1:
-#     - Only ONE IR stream (infra1) exists. infra2 is MISSING -> no stereo.
-#     - 848x480@30 is unavailable (only 848x480@5 or @10 remain).
-# Move to a high-speed USB-C port and use the USB3 cable shipped with the unit.
+# YEU CAU: PHAI CAM VAO CONG USB 3.x
+#   O USB 2.1 chi co MOT luong IR (infra2 khong ton tai) va khong co
+#   848x480@30 -> khong chay stereo duoc.
 
 set -e
 
-# --- Check bandwidth before launching ---
-USB=$(python3 -c "
+# -----------------------------------------------------------------
+# TAT CORE DUMP - QUAN TRONG
+#
+# realsense2_camera_node co ~26 thread. Neu nhan Ctrl+\ (SIGQUIT),
+# kernel phai DUNG TAT CA thread truoc khi ghi core dump. Neu co MOT
+# thread ket trong driver USB (trang thai D, uninterruptible) thi no
+# khong dung duoc -> core dump cho vo han -> tien trinh vao trang thai
+# D va KHONG THE kill duoc, ke ca bang SIGKILL. Chi con cach rut cap.
+ulimit -c 0
+
+# -----------------------------------------------------------------
+# CANH BAO: neu script DUNG IM o dong "Dang kiem tra camera..." thi
+# driver UVC dang deadlock (tien trinh truoc khong thoat sach).
+# Dau hieu: ps se thay tien trinh o STAT=D, wchan=uvc_ctrl_*
+# CACH THOAT: RUT CAP USB cua camera ra roi cam lai.
+# Hoac reset cong (can root, doi 2-1 thanh cong that su dang dung):
+#   echo '2-1' | sudo tee /sys/bus/usb/drivers/usb/unbind
+#   echo '2-1' | sudo tee /sys/bus/usb/drivers/usb/bind
+# -----------------------------------------------------------------
+echo "Dang kiem tra camera... (neu treo o day -> rut cap USB va cam lai)"
+USB=$(timeout 15 python3 -c "
 import pyrealsense2 as rs
 d=list(rs.context().query_devices())
 print(d[0].get_info(rs.camera_info.usb_type_descriptor) if d else 'NO_DEVICE')
 " 2>/dev/null || echo "UNKNOWN")
 
-echo "Detected USB type: $USB"
+echo "USB type phat hien duoc: $USB"
 if [ "$USB" = "NO_DEVICE" ]; then
-  echo "ERROR: no camera found. Check the cable." >&2
+  echo "LOI: khong thay camera nao. Kiem tra cap." >&2
   exit 1
 fi
 if [ "${USB%%.*}" = "2" ]; then
-  echo "WARNING: running on USB $USB -> not enough bandwidth for stereo 848x480@30." >&2
-  echo "         Move to a USB 3.x port before running OpenVINS." >&2
+  echo "CANH BAO: dang o USB $USB -> khong du bang thong cho stereo 848x480@30." >&2
+  echo "          Hay doi sang cong USB 3.x truoc khi chay OpenVINS." >&2
   exit 1
 fi
 
-ros2 launch realsense2_camera rs_launch.py \
-  depth_module.emitter_enabled:=0 \
-  enable_infra1:=true \
-  enable_infra2:=true \
-  enable_depth:=false \
-  enable_color:=false \
-  depth_module.infra_profile:=848x480x30 \
-  enable_gyro:=true \
-  enable_accel:=true \
-  gyro_fps:=400 \
-  accel_fps:=250 \
-  unite_imu_method:=2 \
-  global_time_enabled:=true \
-  depth_module.enable_auto_exposure:=false \
-  depth_module.exposure:=3000 \
-  depth_module.gain:=64
+# 'exec' thay tien trinh bash bang ros2 launch, nen Ctrl+C di THANG toi
+# ros2 launch thay vi phai qua mot lop bash trung gian.
+exec ros2 launch realsense2_camera rs_launch.py \
+  enable_infra1:=true enable_infra2:=true \
+  enable_depth:=false enable_color:=false \
+  enable_gyro:=true enable_accel:=true unite_imu_method:=2
 
-# -----------------------------------------------------------------
-# ON MOTION BLUR
+# =====================================================================
+# SAU KHI DRIVER CHAY (terminal khac)
+# =====================================================================
+# 1) Ap dung emitter + phoi sang (BAT BUOC truoc khi chay OpenVINS):
+#      bash config/apply_camera_settings.sh
 #
-# Measured from real frame metadata (not from the default parameters):
-#       actual_exposure = 19946 us = ~20 ms  !!!
-# With fx = 433 px, one degree spans ~7.56 pixels, so the blur streak is:
-#       blur_px = fx * omega(rad/s) * t_exposure
-#   At 20ms:  115 deg/s -> 17 px | 285 deg/s -> 43 px | 570 deg/s -> 87 px
-#   At  3ms:  115 deg/s ->  3 px | 285 deg/s ->  6 px | 570 deg/s -> 13 px
-# min_px_dist = 15, so at 20ms even moderate shaking makes KLT lose track.
+# 2) Kiem tra luong:
+#      ros2 topic list | grep infra    # PHAI co ca infra1 VA infra2
+#      ros2 topic hz /camera/camera/infra1/image_rect_raw
+#      ros2 topic hz /camera/camera/imu
 #
-# NOTE: the auto_exposure_limit approach does NOT work on this D455
-# (tested: set limit=3000 but actual_exposure stayed at 19946).
-# Auto-exposure must be turned OFF and the value set manually to take effect.
-# Trade-off: darker image -> gain must go up (64) -> slightly more noise.
-# Noise is MUCH more tolerable than blur: noise only makes features less
-# accurate, whereas blur DESTROYS them outright.
+# 3) Kiem tra DO PHAN GIAI co khop config khong (config dat 848x480):
+#      ros2 topic echo --once --no-arr /camera/camera/infra1/image_rect_raw \
+#        | grep -E "height|width"
+#    Ban toi gian nay khong ep infra_profile, nen driver dung mac dinh.
+#    Neu KHAC 848x480, sua 'resolution' trong kalibr_imucam_chain.yaml
+#    hoac them lai depth_module.infra_profile:=848x480x30 o tren.
 #
-# If the room is too dark, try:
-#   - Raising gain to 48-64
-#   - Or relaxing the limit to 4000-5000us
-#   - Or adding light (the IR image responds to daylight and halogen lamps)
-# -----------------------------------------------------------------
-
-# Once the driver is running, in another terminal:
-#   python3 config/gen_realsense_calib.py -o config/rs_d455/kalibr_imucam_chain.yaml
+# =====================================================================
+# CHAY OpenVINS
+# =====================================================================
 #   ros2 launch ov_msckf subscribe.launch.py config:=rs_d455 \
 #        max_cameras:=2 use_stereo:=true rviz_enable:=true
+#
+# KHOI TAO: giu yen 2-3 giay roi DI CHUYEN DUT KHOAT (tinh tien 20-30cm).
+# Static initializer doi mot cu "jerk"; xoay tai cho khong du.

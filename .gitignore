@@ -13,3 +13,4 @@ doxgen_generated
 *.swo
 doc
 .vscode
+*.pyc
